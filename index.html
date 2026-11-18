@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a120e">
+<title>TracciaFood - HACCP</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css?v=20261117.1">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
+<script src="supabase-config.js?v=20261112.3"></script>
+<script src="config.js?v=20261116.2"></script>
+<script src="state.js?v=20261116.2"></script>
+<script src="auth.js?v=20261116.2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body>
+
+<!-- ===== SCHERMATA LOGIN ===== -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-box">
+    <div class="logo">🍽️</div>
+    <h1>TracciaFood</h1>
+    <p class="sub">Tracciabilità HACCP</p>
+    <div class="error" id="auth-error"></div>
+    <form id="auth-form" class="auth-form" onsubmit="event.preventDefault(); handleAuth();">
+      <div id="auth-credentials">
+        <div id="reg-fields" class="hidden"><input type="text" id="auth-nome" placeholder="Nome Cognome"></div>
+        <input type="email" id="auth-email" placeholder="Email">
+        <input type="password" id="auth-password" placeholder="Password">
+      </div>
+      <div id="tenant-picker-wrap" class="form-group hidden">
+        <label for="auth-tenant-select">Azienda</label>
+        <select id="auth-tenant-select"></select>
+      </div>
+      <button type="submit" class="btn-primary" id="btn-main">Accedi</button>
+    </form>
+    <button class="btn-outline" onclick="toggleAuth()" id="btn-toggle">Registrati</button>
+    <a class="link" onclick="handleForgot()">Password dimenticata?</a>
+    <button class="btn-outline hidden" id="btn-cancel-tenant" onclick="cancelTenantChoice()">Cambia account</button>
+    <a class="link link-admin" href="admin.html">👑 Super Admin</a>
+  </div>
+</div>
+
+<!-- ===== APP PRINCIPALE ===== -->
+<div id="app-screen" class="hidden">
+  <header class="app-header glass-panel">
+    <div class="header-left">
+      <h1 id="loc-name">...</h1>
+      <div class="user-info-line">
+        <span id="user-name">...</span>
+        <span id="clock" class="clock-small">...</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="btn-logout" onclick="logout()">Esci</button>
+    </div>
+  </header>
+  
+  <div class="container">
+    <!-- TASTO PRINCIPALE -->
+    <div class="tile-grid cols-1">
+      <div class="tile">
+        <button type="button" class="tile-btn blue tile-btn-wide" onclick="openScanner()" aria-label="Scansiona QR">
+          <span class="tile-label">Scansiona QR</span>
+          <span class="tile-symbol">📷</span>
+        </button>
+      </div>
+    </div>
+
+    <p id="qr-counter" class="qr-counter"></p>
+    <input type="text" id="search" class="search glass-panel" placeholder="🔍 Cerca prodotto..." oninput="render()">
+    <div class="chip-row">
+      <button type="button" class="chip is-active" id="chip-active" onclick="setView('active')">Preparazioni</button>
+      <button type="button" class="chip" id="chip-storico" onclick="setView('history')">📚 Storico</button>
+      <button type="button" class="chip" id="chip-cestino" onclick="setView('trash')">🗑 Cestino</button>
+    </div>
+    <div id="prod-list"></div>
+  </div>
+</div>
+
+<!-- ===== MODAL FORM PRODOTTO ===== -->
+<div class="modal" id="m-form">
+  <div class="modal-box glass-panel">
+    <div class="modal-handle"></div>
+    <h2 id="f-title">Nuovo Prodotto</h2>
+    <button type="button" id="btn-reuse-container" class="btn-outline hidden" onclick="riusaContenitore()">Riusa contenitore (nuova preparazione)</button>
+    <form id="form" onsubmit="saveProduct(event)">
+      <input type="hidden" id="edit-id">
+      
+      <!-- CAMPI PRINCIPALI -->
+      <div class="form-group">
+        <label>Nome *</label>
+        <input type="text" id="f-nome" required>
+      </div>
+      <div class="form-group">
+        <label>Data Produzione</label>
+        <input type="date" id="f-data" onclick="this.showPicker()">
+      </div>
+      <div class="form-group hidden" id="qr-preparation-select-wrap">
+        <label for="qr-preparation-select">Abbina QR a preparazione</label>
+        <select id="qr-preparation-select" onchange="handleQrPreparationChange()"></select>
+      </div>
+      
+      <!-- GRIGLIA TASTI: AGGIUNGI, RIMUOVI, FOTO -->
+      <div class="tile-grid cols-3">
+          <button type="button" class="tile-btn green" onclick="addIngredientRow()" aria-label="Aggiungi ingrediente">
+          <span class="tile-label">Aggiungi</span>
+          <span class="tile-symbol">+</span>
+          </button>
+          <button type="button" class="tile-btn red" onclick="removeIngredientRow()" aria-label="Rimuovi ingrediente">
+          <span class="tile-label">Rimuovi</span>
+          <span class="tile-symbol">−</span>
+          </button>
+          <button type="button" class="tile-btn blue" onclick="openCamera()" aria-label="Scatta foto">
+          <span class="tile-label">Foto</span>
+          <span class="tile-symbol">📷</span>
+          </button>
+        </div>
+      <!-- CONTENITORE INGREDIENTI -->
+      <div id="ingredients-container"></div>
+
+      <!-- NOTE (TextArea integrata nel modulo) -->
+      <div class="form-group">
+        <label>NOTE</label>
+        <textarea id="note-text-main" rows="3" placeholder="Aggiungi note..."></textarea>
+      </div>
+
+      <!-- ANTEPRIMA FOTO (nascosta di default) -->
+      <div id="photo-box" class="photo-box">
+        <img id="photo-prev">
+        <br><button type="button" class="btn-outline photo-remove" onclick="removePhoto()">Rimuovi</button>
+      </div>
+      <!-- TASTI FINALI -->
+      <div class="tile-grid cols-2">
+          <button type="submit" class="tile-btn green" id="form-submit-button" aria-label="Salva">
+          <span class="tile-label" id="form-submit-label">Salva</span>
+          <span class="tile-symbol">💾</span>
+        </button>
+          <button type="button" class="tile-btn red" onclick="annullaForm()" aria-label="Annulla">
+          <span class="tile-label">Annulla</span>
+          <span class="tile-symbol">✖</span>
+          </button>
+    </div>
+    </form>
+</div>
+  </div>
+
+<!-- ===== MODAL QR ===== -->
+<div class="modal" id="m-qr">
+  <div class="modal-box glass-panel">
+    <div class="modal-handle"></div>
+    <h2>QR Code</h2>
+    <div id="qr-box"></div>
+    <button class="btn-outline modal-action" onclick="closeModal('m-qr')">Chiudi</button>
+  </div>
+</div>
+
+<!-- ===== MODAL SCANNER ===== -->
+<div class="modal" id="m-scan">
+  <div class="modal-box glass-panel">
+    <div class="modal-handle"></div>
+    <h2>Scansiona</h2>
+    <div id="reader"></div>
+    <button class="btn-danger modal-action" onclick="closeScanner()">Chiudi</button>
+  </div>
+</div>
+
+<!-- ===== MODAL DETTAGLIO PREPARAZIONE ===== -->
+<div class="modal" id="m-detail">
+  <div class="modal-box glass-panel detail-modal">
+    <div class="modal-handle"></div>
+    <button type="button" class="detail-menu-button" id="detail-menu-button" onclick="openActions()" aria-label="Altre azioni">&#8942;</button>
+    <h2 id="d-title">Preparazione</h2>
+    <section class="detail-section">
+      <p><b>Data:</b> <span id="d-data">—</span></p>
+      <p><b>QR:</b> <span id="d-qr">—</span></p>
+      <p><b>Stato:</b> <span id="d-stato">—</span></p>
+    </section>
+    <section class="detail-section">
+      <h3 class="detail-heading">Ingredienti</h3>
+      <div id="d-ingredients" class="detail-ingredients"></div>
+    </section>
+    <section class="detail-section hidden" id="d-note-wrap">
+      <h3 class="detail-heading">Note</h3>
+      <p id="d-note"></p>
+    </section>
+    <div class="form-actions hidden" id="d-scan-actions">
+      <button type="button" class="btn-primary" onclick="nuovoContenutoDaScheda()">Nuovo contenuto</button>
+      <button type="button" class="btn-outline" onclick="correggiDaScheda()">Correggi</button>
+    </div>
+    <button class="btn-outline modal-action" onclick="closeModal('m-detail')">Chiudi</button>
+  </div>
+</div>
+
+<!-- ===== FOGLIO AZIONI ===== -->
+<div class="modal" id="m-actions">
+  <div class="modal-box glass-panel">
+    <div class="modal-handle"></div>
+    <h2>Azioni</h2>
+    <button type="button" class="action-row" onclick="segnaComeFinita()">Segna come finita</button>
+    <button type="button" class="action-row" onclick="stampaScheda()">Stampa scheda</button>
+    <button type="button" class="action-row" onclick="correggiDaScheda()">Correggi</button>
+    <button type="button" class="action-row action-row-danger" onclick="cancellaDaScheda()">Cancella</button>
+    <button type="button" class="btn-outline modal-action" onclick="closeModal('m-actions')">Chiudi</button>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div id="toast" class="toast hidden" role="status" aria-live="polite">
+  <span id="toast-message"></span>
+  <button type="button" id="toast-action" class="toast-undo hidden" onclick="runToastAction()">Annulla</button>
+</div>
+
+<script src="app.js?v=20261117.2"></script>
+</body>
+</html>

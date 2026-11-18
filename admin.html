@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Superadmin - TracciaFood</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.1/dist/umd/supabase.js"></script>
+<script src="supabase-config.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f2f5f8; padding: 12px; color: #1e293b; margin: 0; }
+  
+  /* LOGIN */
+  #login-box { max-width: 400px; margin: 60px auto; background: white; padding: 30px 20px; border-radius: 20px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+  #login-box h2 { margin-top: 0; font-size: 22px; }
+  #login-box input { width: 100%; padding: 14px; margin-bottom: 12px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 16px; } /* 16px evita zoom su iOS */
+  #login-box button { width: 100%; padding: 14px; background: #0f172a; color: #f59e0b; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; }
+  .login-sub { color: #64748b; font-size: 14px; }
+  #error-msg { color: red; font-weight: bold; margin-bottom: 10px; min-height: 20px; }
+  
+  /* PANNELLO */
+  #admin-panel { display: none; max-width: 1100px; margin: 0 auto; }
+  .header-panel { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+  .header-panel h2 { margin: 0; font-size: 20px; }
+  .btn-add { background: #10b981; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
+  .btn-logout { background: #ef4444; color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 14px; }
+  .btn-cancel { background: #e2e8f0; color: #1e293b; border: 1px solid #cbd5e1; padding: 14px; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 15px; min-height: 48px; }
+  .btn-block { margin-bottom: 15px; width: 100%; }
+  .panel-white { background: white; padding: 20px; border-radius: 16px; }
+  #table-title { margin-bottom: 10px; font-size: 16px; }
+  .mt-15 { margin-top: 15px; }
+  
+  .nav-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 15px; }
+  .nav-tabs button { display: flex; align-items: center; justify-content: center; min-width: 0; height: 50px; padding: 8px 6px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 12px; color: white; white-space: nowrap; }
+  .nav-tabs .btn-add { background: #10b981; }
+  .nav-tabs #tab-active { background: #3b82f6; }
+  .nav-tabs #tab-suspended { background: #f59e0b; }
+  .nav-tabs #tab-trash { background: #ef4444; }
+  .nav-tabs button.active { outline: 2px solid rgba(255,255,255,0.9); outline-offset: -4px; }
+  .btn-back { display: flex; align-items: center; gap: 8px; margin: 0 0 15px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #0f172a; color: white; font-weight: bold; cursor: pointer; }
+  .btn-back[hidden] { display: none; }
+  .btn-back-arrow { color: white; font-size: 24px; line-height: 1; }
+  
+  .search-bar { width: 100%; padding: 14px 18px; margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 15px; background: white; }
+  
+  /* CARD AZIENDA (sostituiscono la tabella) */
+  .azienda-card { background: white; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #f1f5f9; }
+  .azienda-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+  .azienda-nome { font-weight: 800; font-size: 16px; color: #0f172a; }
+  .azienda-codice { background: #0f172a; color: white; padding: 3px 8px; border-radius: 6px; font-family: monospace; font-size: 11px; display: inline-block; margin-bottom: 5px; }
+  .azienda-dettagli { font-size: 13px; color: #64748b; margin-bottom: 12px; }
+  .azienda-dettagli strong { color: #1e293b; }
+  
+  .azioni { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .azioni button { min-width: 0; padding: 8px 4px; border: none; border-radius: 10px; font-size: clamp(11px, 3.5vw, 14px); line-height: 1.15; font-weight: bold; cursor: pointer; color: white; width: 100%; min-height: 48px; }
+  .btn-edit { background: #3b82f6; }
+  .btn-warning { background: #f59e0b; }
+  .btn-danger { background: #ef4444; }
+  .btn-success { background: #10b981; }
+  
+  .pagination { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 20px; padding-bottom: 20px; }
+  .pagination button { padding: 10px 15px; border: 1px solid #e2e8f0; background: white; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 14px; }
+  .pagination button:disabled { opacity: 0.5; }
+  
+  /* MODALE */
+  .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; justify-content: center; align-items: flex-end; }
+  .modal.show { display: flex; }
+  .modal-box { background: white; padding: 20px; border-radius: 20px 20px 0 0; width: 100%; max-width: 800px; max-height: 92vh; overflow-y: auto; animation: slideUp 0.3s ease; }
+  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+  .modal-box h2 { margin-top: 0; font-size: 20px; }
+  
+  .form-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .form-grid-3 { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .form-group { display: flex; flex-direction: column; margin-bottom: 5px; }
+  .form-group label { font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 5px; text-transform: uppercase; }
+  .form-group input { padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 16px; background: #f8fafc; width: 100%; }
+  .form-group input:read-only { background: #e2e8f0; color: #64748b; }
+  .form-group.mb-12 { margin-bottom: 12px; }
+  .btn-primary { background: #3b82f6; color: white; border: none; padding: 14px; border-radius: 10px; font-weight: bold; cursor: pointer; width: 100%; font-size: 16px; }
+  .divider { border: 0; border-top: 1px solid #e2e8f0; margin: 15px 0; }
+  .section-title { margin-top: 0; }
+  .modal-actions { display: flex; gap: 10px; margin-top: 15px; }
+  .modal-actions button { flex: 1; }
+  .list-state { text-align: center; }
+  .list-state-error { color: red; }
+  .list-state-muted { color: #64748b; }
+  .stato-badge { padding: 4px 10px; border-radius: 10px; font-size: 11px; font-weight: bold; }
+  .stato-badge.is-attivo { background: #d1fae5; color: #065f46; }
+  .stato-badge.is-sospeso { background: #fee2e2; color: #991b1b; }
+  .detail-note { font-size: 13px; color: #64748b; margin: 0 0 12px; }
+  .qr-print-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 15px; }
+  .qr-print-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; color: #0f172a; }
+  .qr-print-code { font-family: monospace; font-size: 11px; text-align: center; overflow-wrap: anywhere; }
+
+  @media print {
+    body { background: white; padding: 0; }
+    body * { visibility: hidden; }
+    #qr-lotto-results, #qr-lotto-results * { visibility: visible; }
+    #qr-lotto-results { position: absolute; left: 0; top: 0; width: 100%; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .qr-print-card { break-inside: avoid; }
+  }
+  
+  #view-modifica { display: none; }
+  
+  /* DESKTOP (sopra i 768px) */
+  @media (min-width: 768px) {
+    .form-grid { grid-template-columns: 1fr 1fr; }
+    .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .azioni { grid-template-columns: repeat(3, 130px); justify-content: end; }
+    .azioni button { width: 130px; padding: 8px 10px; }
+    .modal { align-items: center; }
+    .modal-box { border-radius: 16px; padding: 30px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="login-box">
+  <h2>👑 Super Admin</h2>
+  <p class="login-sub">Accesso Riservato</p>
+  <div id="error-msg"></div>
+  <input type="email" id="email" placeholder="Email Superadmin">
+  <input type="password" id="password" placeholder="Password">
+  <button onclick="login()">Entra</button>
+</div>
+<div id="admin-panel">
+  
+  <!-- VISTA LISTA -->
+  <div id="view-lista">
+    <div class="header-panel">
+      <h2>Gestione Aziende</h2>
+      <button class="btn-logout" onclick="logout()">Esci</button>
+    </div>
+
+    <div class="nav-tabs" aria-label="Navigazione aziende">
+      <button type="button" class="btn-add" onclick="apriCrea()" aria-label="Nuova azienda">+ Nuova</button>
+      <button id="tab-active" class="active" onclick="cambiaTab('attive')">Attive</button>
+      <button id="tab-suspended" onclick="cambiaTab('sospese')">Sospese</button>
+      <button id="tab-trash" onclick="cambiaTab('cestino')">Cestino</button>
+    </div>
+
+    <button type="button" id="suspended-back" class="btn-back" onclick="cambiaTab('attive')" hidden>
+      <span class="btn-back-arrow" aria-hidden="true">←</span>
+      <span>Indietro</span>
+    </button>
+    <input type="text" id="search" class="search-bar" placeholder="🔍 Cerca nome, codice o settore..." oninput="caricaAziende()">
+
+    <h3 id="table-title">Aziende Attive</h3>
+    <div id="lista-aziende"></div>
+
+    <div class="pagination">
+      <button id="btn-prev" onclick="paginaPrec()">◀</button>
+      <span id="page-info">Pagina 1</span>
+      <button id="btn-next" onclick="paginaSucc()">▶</button>
+    </div>
+  </div>
+
+  <!-- VISTA MODIFICA -->
+  <div id="view-modifica">
+    <div class="header-panel">
+      <h2>✏️ Modifica Azienda</h2>
+    </div>
+    <button class="btn-cancel btn-block" onclick="tornaAllaLista()">Annulla modifiche e torna alla lista</button>
+
+    <div class="panel-white">
+      <input type="hidden" id="edit-id">
+      <div class="form-group mb-12">
+        <label>Codice Univoco</label>
+        <input type="text" id="edit-codice" readonly>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Nome Azienda *</label><input type="text" id="edit-nome"></div>
+        <div class="form-group"><label>Partita IVA</label><input type="text" id="edit-piva"></div>
+      </div>
+      <div class="form-grid-3">
+        <div class="form-group"><label>Via/Piazza</label><input type="text" id="edit-via"></div>
+        <div class="form-group"><label>N. Civico</label><input type="text" id="edit-civico"></div>
+        <div class="form-group"><label>CAP</label><input type="text" id="edit-cap"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Città</label><input type="text" id="edit-citta"></div>
+        <div class="form-group"><label>Provincia</label><input type="text" id="edit-provincia" maxlength="2"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Telefono</label><input type="text" id="edit-telefono"></div>
+        <div class="form-group"><label>Cellulare</label><input type="text" id="edit-cellulare"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group"><label>Email Contatto</label><input type="email" id="edit-email-contatto"></div>
+        <div class="form-group"><label>Codice SDI</label><input type="text" id="edit-sdi"></div>
+      </div>
+      <div class="form-group"><label>Settore</label><input type="text" id="edit-settore"></div>
+      <button class="btn-primary mt-15" onclick="salvaModifica()">💾 Salva Modifiche</button>
+    </div>
+
+    <div class="panel-white mt-15">
+      <h4 class="section-title">QR Code</h4>
+      <p id="qr-stats" class="detail-note">—</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Quantità nuovo lotto (1–500)</label>
+          <input type="number" id="qr-qty" min="1" max="500" value="200">
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <button class="btn-primary" onclick="generaQrLotto()">Genera lotto</button>
+        </div>
+      </div>
+      <div id="qr-lotto-results" class="qr-print-list"></div>
+      <div class="modal-actions">
+        <button class="btn-cancel" onclick="stampaQrLotto()">Stampa lotto</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- MODALE CREAZIONE -->
+<div class="modal" id="modal-crea">
+  <div class="modal-box">
+    <h2>Crea Nuova Azienda</h2>
+    <div class="form-grid">
+      <div class="form-group"><label>Nome Azienda *</label><input type="text" id="new_azienda"></div>
+      <div class="form-group"><label>Partita IVA</label><input type="text" id="new_piva"></div>
+    </div>
+    <div class="form-grid-3">
+      <div class="form-group"><label>Via</label><input type="text" id="new_via"></div>
+      <div class="form-group"><label>Civico</label><input type="text" id="new_civico"></div>
+      <div class="form-group"><label>CAP</label><input type="text" id="new_cap"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Città</label><input type="text" id="new_citta"></div>
+      <div class="form-group"><label>Provincia</label><input type="text" id="new_provincia" maxlength="2"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Telefono</label><input type="text" id="new_telefono"></div>
+      <div class="form-group"><label>Cellulare</label><input type="text" id="new_cellulare"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Email Contatto</label><input type="email" id="new_email_contatto"></div>
+      <div class="form-group"><label>Codice SDI</label><input type="text" id="new_sdi"></div>
+    </div>
+    <div class="form-group"><label>Settore</label><input type="text" id="new_settore"></div>
+    
+    <hr class="divider">
+    <h4 class="section-title">Credenziali Admin</h4>
+    <div class="form-grid">
+      <div class="form-group"><label>Nome *</label><input type="text" id="new_admin_nome"></div>
+      <div class="form-group"><label>Cognome *</label><input type="text" id="new_admin_cognome"></div>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label>Email Login *</label><input type="email" id="new_email"></div>
+      <div class="form-group"><label>Password *</label><input type="password" id="new_password"></div>
+    </div>
+    
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="chiudiCrea()">Annulla</button>
+      <button class="btn-primary" onclick="creaAzienda()">Crea</button>
+    </div>
+  </div>
+</div>
+<script>
+const supa = supabase.createClient(
+  window.SUPABASE_CONFIG.url,
+  window.SUPABASE_CONFIG.anonKey
+);
+
+// Escape HTML per prevenire XSS sui dati dell'azienda
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+let currentTab = 'attive';
+let currentPage = 0;
+const PAGE_SIZE = 10;
+let allAziende = [];
+
+async function login() {
+  const email = document.getElementById('email').value.trim();
+  const pass = document.getElementById('password').value;
+  const err = document.getElementById('error-msg');
+  err.textContent = '';
+  if (!email || !pass) return err.textContent = 'Inserisci email e password.';
+  const { error: loginError } = await supa.auth.signInWithPassword({ email, password: pass });
+  if (loginError) return err.textContent = 'Errore: ' + loginError.message;
+  const { data: isSuperadmin, error: roleError } = await supa.rpc('is_superadmin');
+  if (roleError) {
+    await supa.auth.signOut();
+    return err.textContent = 'Errore verifica permessi: ' + roleError.message;
+  }
+  if (!isSuperadmin) {
+    await supa.auth.signOut();
+    return err.textContent = 'Accesso negato.';
+  }
+  document.getElementById('login-box').style.display = 'none';
+  document.getElementById('admin-panel').style.display = 'block';
+  caricaAziende();
+}
+
+async function logout() { await supa.auth.signOut(); location.reload(); }
+
+function cambiaTab(tab) {
+  currentTab = tab;
+  currentPage = 0;
+  document.getElementById('tab-active').classList.toggle('active', tab === 'attive');
+  document.getElementById('tab-suspended').classList.toggle('active', tab === 'sospese');
+  document.getElementById('tab-trash').classList.toggle('active', tab === 'cestino');
+  document.getElementById('suspended-back').hidden = tab !== 'sospese';
+  document.getElementById('table-title').textContent = {
+    attive: 'Aziende Attive',
+    sospese: 'Aziende Sospese',
+    cestino: 'Aziende nel Cestino'
+  }[tab];
+  caricaAziende();
+}
+
+async function caricaAziende() {
+  const search = document.getElementById('search').value.toLowerCase().trim();
+  const list = document.getElementById('lista-aziende');
+  list.innerHTML = '<p class="list-state">Caricamento...</p>';
+
+  let query = supa.from('tenants').select('*').order('creato_il', { ascending: false });
+  if (currentTab === 'cestino') {
+    query = query.not('deleted_at', 'is', null);
+  } else {
+    query = query.is('deleted_at', null).eq('stato', currentTab === 'sospese' ? 'sospeso' : 'attivo');
+  }
+
+  const { data, error } = await query;
+  if (error) return list.innerHTML = `<p class="list-state list-state-error">Errore: ${error.message}</p>`;
+
+  allAziende = (data || []).filter(t => {
+    if (!search) return true;
+    const str = `${t.nome_azienda} ${t.codice_univoco} ${t.settore_merceologico}`.toLowerCase();
+    return str.includes(search);
+  });
+
+  if (allAziende.length === 0) {
+    list.innerHTML = '<p class="list-state list-state-muted">Nessuna azienda trovata.</p>';
+    document.getElementById('page-info').textContent = 'Pagina 0 di 0';
+    return;
+  }
+
+  renderPagina();
+}
+
+function renderPagina() {
+  const list = document.getElementById('lista-aziende');
+  const start = currentPage * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  const pageData = allAziende.slice(start, end);
+
+  list.innerHTML = pageData.map(t => {
+    const isDeleted = !!t.deleted_at;
+    const stato = t.stato || '';
+    const azioni = isDeleted
+      ? `<button class="btn-success" onclick="recupera('${t.id}')">♻️ Recupera</button>`
+      : `<button class="btn-edit" onclick="apriModifica('${t.id}')">✏️ Modifica</button>
+         <button class="${stato === 'attivo' ? 'btn-warning' : 'btn-success'}" onclick="sospendi('${t.id}', '${esc(stato)}')">${stato === 'attivo' ? 'Sospendi' : 'Attiva'}</button>
+         <button class="btn-danger" onclick="elimina('${t.id}')">🗑️ Elimina</button>`;
+    return `
+      <div class="azienda-card">
+        <div class="azienda-header">
+          <div>
+            <div class="azienda-codice">${esc(t.codice_univoco || '—')}</div>
+            <div class="azienda-nome">${esc(t.nome_azienda)}</div>
+          </div>
+          <span class="stato-badge ${stato === 'attivo' ? 'is-attivo' : 'is-sospeso'}">${esc(stato.toUpperCase())}</span>
+        </div>
+        <div class="azienda-dettagli">
+          <strong>Settore:</strong> ${esc(t.settore_merceologico || '—')}<br>
+          ${t.email_contatto ? `<strong>Email:</strong> ${esc(t.email_contatto)}` : ''}
+        </div>
+        <div class="azioni">${azioni}</div>
+      </div>
+    `;
+  }).join('');
+
+  const totalPages = Math.ceil(allAziende.length / PAGE_SIZE);
+  document.getElementById('page-info').textContent = `Pagina ${currentPage + 1} di ${totalPages}`;
+  document.getElementById('btn-prev').disabled = currentPage === 0;
+  document.getElementById('btn-next').disabled = currentPage >= totalPages - 1;
+}
+
+function paginaPrec() { if (currentPage > 0) { currentPage--; renderPagina(); } }
+function paginaSucc() { 
+  const totalPages = Math.ceil(allAziende.length / PAGE_SIZE);
+  if (currentPage < totalPages - 1) { currentPage++; renderPagina(); } 
+}
+
+function apriCrea() { document.getElementById('modal-crea').classList.add('show'); }
+function chiudiCrea() {
+  document.querySelectorAll('#modal-crea input').forEach(el => el.value = '');
+  document.getElementById('modal-crea').classList.remove('show');
+}
+
+async function creaAzienda() {
+  const az = document.getElementById('new_azienda').value.trim();
+  const nome = document.getElementById('new_admin_nome').value.trim();
+  const cognome = document.getElementById('new_admin_cognome').value.trim();
+  const email = document.getElementById('new_email').value.trim();
+  const pass = document.getElementById('new_password').value;
+  if (!az || !nome || !cognome || !email || !pass) return alert('Compila i campi obbligatori.');
+  
+  const { error } = await supa.rpc('crea_nuovo_ristorante', {
+    p_nome_azienda: az, 
+    p_partita_iva: document.getElementById('new_piva').value.trim(),
+    p_via: document.getElementById('new_via').value.trim(),
+    p_numero_civico: document.getElementById('new_civico').value.trim(),
+    p_cap: document.getElementById('new_cap').value.trim(),
+    p_citta: document.getElementById('new_citta').value.trim(),
+    p_provincia: document.getElementById('new_provincia').value.trim(),
+    p_telefono: document.getElementById('new_telefono').value.trim(),
+    p_cellulare: document.getElementById('new_cellulare').value.trim(),
+    p_email_contatto: document.getElementById('new_email_contatto').value.trim(),
+    p_codice_sdi: document.getElementById('new_sdi').value.trim(),
+    p_settore: document.getElementById('new_settore').value.trim(),
+    p_nome_admin: `${nome} ${cognome}`, 
+    p_email: email, 
+    p_password: pass
+  });
+  
+  if (error) return alert('Errore: ' + error.message);
+  alert('Azienda creata!');
+  chiudiCrea();
+  caricaAziende();
+}
+
+async function apriModifica(id) {
+  const { data, error } = await supa.from('tenants').select('*').eq('id', id).single();
+  if (error || !data) return alert('Errore nel caricamento.');
+  
+  document.getElementById('edit-id').value = data.id;
+  document.getElementById('edit-codice').value = data.codice_univoco || '';
+  document.getElementById('edit-nome').value = data.nome_azienda || '';
+  document.getElementById('edit-piva').value = data.partita_iva || '';
+  document.getElementById('edit-via').value = data.via || '';
+  document.getElementById('edit-civico').value = data.numero_civico || '';
+  document.getElementById('edit-cap').value = data.cap || '';
+  document.getElementById('edit-citta').value = data.citta || '';
+  document.getElementById('edit-provincia').value = data.provincia || '';
+  document.getElementById('edit-telefono').value = data.telefono || '';
+  document.getElementById('edit-cellulare').value = data.cellulare || '';
+  document.getElementById('edit-email-contatto').value = data.email_contatto || '';
+  document.getElementById('edit-sdi').value = data.codice_sdi || '';
+  document.getElementById('edit-settore').value = data.settore_merceologico || '';
+  
+  document.getElementById('view-lista').style.display = 'none';
+  document.getElementById('view-modifica').style.display = 'block';
+
+  currentQrLotto = null;
+  document.getElementById('qr-lotto-results').replaceChildren();
+  await loadQrStats(data.id);
+}
+
+let currentQrLotto = null;
+
+async function loadQrStats(tenantId) {
+  const stats = document.getElementById('qr-stats');
+  if (!tenantId) {
+    stats.textContent = 'Salva l’azienda per gestire i QR.';
+    return;
+  }
+  const { count, error } = await supa
+    .from('qr_pool')
+    .select('id', { count: 'exact', head: true })
+    .eq('tenant_id', tenantId)
+    .eq('stato', 'disponibile');
+  stats.textContent = error ? 'QR non disponibili: ' + error.message : `QR disponibili: ${count ?? 0}`;
+}
+
+async function generaQrLotto() {
+  const tenantId = document.getElementById('edit-id').value;
+  if (!tenantId) return alert('Salva prima l’azienda.');
+
+  const quantity = Number(document.getElementById('qr-qty').value);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 500) {
+    return alert('Inserisci una quantità tra 1 e 500.');
+  }
+
+  const { data, error } = await supa.rpc('generate_qr_batch', {
+    p_tenant_id: tenantId,
+    p_quantity: quantity
+  });
+  if (error) return alert('Errore generazione QR: ' + error.message);
+
+  const rows = (data || []).filter(row => row.codice_univoco);
+  if (rows.length !== quantity) {
+    return alert(`Generazione incompleta: richiesti ${quantity}, ricevuti ${rows.length}.`);
+  }
+
+  currentQrLotto = { lotto: rows[0].lotto_stampa || null, codes: rows.map(row => row.codice_univoco) };
+  renderQrLottoCards(currentQrLotto.codes);
+  await loadQrStats(tenantId);
+}
+
+function renderQrLottoCards(codes) {
+  const list = document.getElementById('qr-lotto-results');
+  list.replaceChildren();
+
+  codes.forEach(code => {
+    const card = document.createElement('article');
+    card.className = 'qr-print-card';
+    const box = document.createElement('div');
+    const label = document.createElement('div');
+    label.className = 'qr-print-code';
+    label.textContent = code;
+
+    const url = new URL('index.html', window.location.href);
+    url.searchParams.set('qr', code);
+    new QRCode(box, { text: url.toString(), width: 140, height: 140 });
+
+    card.append(box, label);
+    list.appendChild(card);
+  });
+}
+
+async function stampaQrLotto() {
+  if (!currentQrLotto?.codes?.length) return alert('Genera prima un lotto.');
+
+  if (currentQrLotto.lotto) {
+    const { error } = await supa.rpc('mark_qr_batch_printed', { p_lotto: currentQrLotto.lotto });
+    if (error) alert('Attenzione: stampa non registrata: ' + error.message);
+  }
+
+  window.print();
+}
+
+function tornaAllaLista() {
+  document.querySelectorAll('#view-modifica input').forEach(el => el.value = '');
+  document.getElementById('view-modifica').style.display = 'none';
+  document.getElementById('view-lista').style.display = 'block';
+  currentQrLotto = null;
+  document.getElementById('qr-lotto-results').replaceChildren();
+  document.getElementById('qr-stats').textContent = '—';
+  caricaAziende();
+}
+
+async function salvaModifica() {
+  const id = document.getElementById('edit-id').value;
+  const obj = {
+    nome_azienda: document.getElementById('edit-nome').value.trim(),
+    partita_iva: document.getElementById('edit-piva').value.trim(),
+    via: document.getElementById('edit-via').value.trim(),
+    numero_civico: document.getElementById('edit-civico').value.trim(),
+    cap: document.getElementById('edit-cap').value.trim(),
+    citta: document.getElementById('edit-citta').value.trim(),
+    provincia: document.getElementById('edit-provincia').value.trim(),
+    telefono: document.getElementById('edit-telefono').value.trim(),
+    cellulare: document.getElementById('edit-cellulare').value.trim(),
+    email_contatto: document.getElementById('edit-email-contatto').value.trim(),
+    codice_sdi: document.getElementById('edit-sdi').value.trim(),
+    settore_merceologico: document.getElementById('edit-settore').value.trim()
+  };
+  const { error } = await supa.from('tenants').update(obj).eq('id', id);
+  if (error) return alert('Errore: ' + error.message);
+  alert('Modifiche salvate!');
+  tornaAllaLista();
+}
+
+async function elimina(id) {
+  if (!confirm('Spostare nel cestino?')) return;
+  const { error } = await supa.from('tenants').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) return alert('Errore: ' + error.message);
+  caricaAziende();
+}
+async function recupera(id) {
+  if (!confirm('Recuperare?')) return;
+  const stato = allAziende.find(azienda => azienda.id === id)?.stato;
+  const { error } = await supa.from('tenants').update({ deleted_at: null }).eq('id', id);
+  if (error) return alert('Errore: ' + error.message);
+  cambiaTab(stato === 'sospeso' ? 'sospese' : 'attive');
+}
+async function sospendi(id, statoAttuale) {
+  const nuovoStato = statoAttuale === 'attivo' ? 'sospeso' : 'attivo';
+  const { error } = await supa.from('tenants').update({ stato: nuovoStato }).eq('id', id);
+  if (error) return alert('Errore: ' + error.message);
+  cambiaTab(nuovoStato === 'sospeso' ? 'sospese' : 'attive');
+}
+
+// Registrazione Service Worker (PWA offline)
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
